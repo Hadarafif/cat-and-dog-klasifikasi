@@ -26,7 +26,12 @@ def infer_model_spec(model) -> tuple[int, int]:
     img_size, channels = 224, 3
     try:
         # (None, H, W, C)
-        if len(shp) == 4 and isinstance(shp[1], int) and isinstance(shp[2], int) and shp[1] == shp[2]:
+        if (
+            len(shp) == 4
+            and isinstance(shp[1], int)
+            and isinstance(shp[2], int)
+            and shp[1] == shp[2]
+        ):
             img_size = int(shp[1])
             if shp[3] in (1, 3):
                 channels = int(shp[3])
@@ -53,21 +58,18 @@ def label_from_map(label_map, idx: int) -> str:
 
 
 # =========================
-# Image safety helpers (FIX TypeError & incompatible image types)
+# Image safety helpers
 # =========================
 def _to_pil_rgb(x) -> Image.Image:
     """Convert various image-like inputs to PIL RGB safely."""
     if isinstance(x, Image.Image):
         return x.convert("RGB")
 
-    # numpy array
     if isinstance(x, np.ndarray):
         arr = x
-        # (H,W,1) -> (H,W)
         if arr.ndim == 3 and arr.shape[-1] == 1:
             arr = arr.squeeze(-1)
 
-        # floats -> uint8
         if np.issubdtype(arr.dtype, np.floating):
             arr = np.clip(arr, 0, 1)
             arr = (arr * 255).astype(np.uint8)
@@ -78,7 +80,6 @@ def _to_pil_rgb(x) -> Image.Image:
             return Image.fromarray(arr, mode="L").convert("RGB")
         return Image.fromarray(arr).convert("RGB")
 
-    # file-like/path/bytes: let PIL decide
     return Image.open(x).convert("RGB")
 
 
@@ -96,13 +97,24 @@ def _safe_image(img, caption: str | None = None):
 
     cap = None if caption is None else str(caption)
 
-    # Some environments/versions error on use_container_width -> fallback
+    # Some Streamlit versions don't accept use_container_width
     try:
         st.image(img_pil, caption=cap, use_container_width=True)
     except TypeError:
         st.image(img_pil, caption=cap, use_column_width=True)
 
 
+def _safe_button(label: str, *, type: str = "secondary", key: str | None = None) -> bool:
+    """Button with fallback + explicit key to avoid DuplicateWidgetID."""
+    try:
+        return st.button(label, type=type, use_container_width=True, key=key)
+    except TypeError:
+        return st.button(label, type=type, use_column_width=True, key=key)
+
+
+# =========================
+# Preprocess + probs
+# =========================
 def preprocess(img: Image.Image, img_size: int, channels: int) -> np.ndarray:
     """Preprocess PIL -> (1,H,W,C) float32 0..1."""
     img_size = int(img_size)
@@ -135,7 +147,6 @@ def probs_from_pred(y: np.ndarray) -> np.ndarray:
     probs = y.astype(np.float32)
     s = float(np.sum(probs))
     if not (0.98 <= s <= 1.02) or np.any(probs < 0):
-        # treat as logits
         probs = np.exp(probs - np.max(probs))
         probs = probs / (np.sum(probs) + 1e-12)
     else:
@@ -164,6 +175,10 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
     st.subheader("🔮 Prediksi (pilih model + input gambar)")
 
     left, right = st.columns([1, 1], gap="large")
+
+    # state
+    img = None
+    caption = None
 
     with left:
         model_choice = st.selectbox("Pilih Model", list(model_specs.keys()))
@@ -194,17 +209,17 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             horizontal=True,
         )
 
-        img = None
-        caption = None
-
         if mode.startswith("Pilih") and dataset_available(dataset_dir):
             cls = st.selectbox("Kelas (folder)", ["Cat", "Dog"])
             files = list_images(dataset_dir / cls)
             if not files:
                 st.warning(f"Tidak ada gambar di: {dataset_dir/cls}")
                 st.stop()
+
             pick = st.radio("Pilih file", ["Acak", "Manual"], horizontal=True)
-            chosen = random.choice(files) if pick == "Acak" else st.selectbox("File", files, format_func=lambda p: p.name)
+            chosen = random.choice(files) if pick == "Acak" else st.selectbox(
+                "File", files, format_func=lambda p: p.name
+            )
             with Image.open(chosen) as im:
                 img = im.copy()
             caption = f"{cls}/{chosen.name}"
@@ -222,7 +237,9 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
         _safe_image(img, caption=caption)
 
         st.write("")
-        if st.button("🚀 Prediksi Sekarang", type="primary", use_container_width=True):
+        do_pred = _safe_button("🚀 Prediksi Sekarang", type="primary", key="btn_prediksi_citra")
+
+        if do_pred:
             if img is None:
                 st.warning("Gambar belum ada.")
                 st.stop()
@@ -231,32 +248,19 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             y = model.predict(x, verbose=0)
             probs = probs_from_pred(y)
 
-    st.write("")
+            order = np.argsort(-probs)[: int(topk)]
+            best = int(order[0])
 
-    # tombol: fallback kalau versi streamlit tidak dukung use_container_width
-    try:
-        do_pred = st.button("🚀 Prediksi Sekarang", type="primary", use_container_width=True)
-    except TypeError:
-        do_pred = st.button("🚀 Prediksi Sekarang", type="primary", use_column_width=True)
+            st.subheader("✅ Hasil Prediksi")
+            st.success(f"Model: **{model_choice}**")
+            st.success(f"Prediksi: **{label_from_map(label_map, best)}** (prob: **{float(probs[best]):.4f}**)")
 
-    if do_pred:
-        x = preprocess(img, int(img_size), int(channels))
-        y = model.predict(x, verbose=0)
-        probs = probs_from_pred(y)
-
-        order = np.argsort(-probs)[:topk]
-        best = int(order[0])
-
-        st.subheader("✅ Hasil Prediksi")
-        st.success(f"Model: **{model_choice}**")
-        st.success(f"Prediksi: **{label_from_map(label_map, best)}** (prob: **{float(probs[best]):.4f}**)")
-
-        import pandas as pd
-        rows = [
-            {"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])}
-            for i in order
-        ]
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            import pandas as pd
+            rows = [
+                {"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])}
+                for i in order
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
 # =========================
@@ -300,7 +304,7 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
         st.warning("labels.json tidak terbaca sempurna. Pastikan format: {'0':'Cat','1':'Dog'}")
         name_to_id = {"Cat": 0, "Dog": 1}
 
-    do_run = st.button("🧪 Jalankan Evaluasi 3 Model", type="primary")
+    do_run = _safe_button("🧪 Jalankan Evaluasi 3 Model", type="primary", key="btn_eval_citra")
     if not do_run:
         st.caption("Klik tombol di atas untuk menghitung accuracy, confusion matrix, dan classification report.")
         return
