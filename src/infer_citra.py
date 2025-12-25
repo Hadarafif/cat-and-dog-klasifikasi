@@ -25,13 +25,7 @@ def infer_model_spec(model) -> tuple[int, int]:
         shp = shp[0]
     img_size, channels = 224, 3
     try:
-        # (None, H, W, C)
-        if (
-            len(shp) == 4
-            and isinstance(shp[1], int)
-            and isinstance(shp[2], int)
-            and shp[1] == shp[2]
-        ):
+        if len(shp) == 4 and isinstance(shp[1], int) and isinstance(shp[2], int) and shp[1] == shp[2]:
             img_size = int(shp[1])
             if shp[3] in (1, 3):
                 channels = int(shp[3])
@@ -58,10 +52,9 @@ def label_from_map(label_map, idx: int) -> str:
 
 
 # =========================
-# Image safety helpers
+# UI compatibility helpers
 # =========================
 def _to_pil_rgb(x) -> Image.Image:
-    """Convert various image-like inputs to PIL RGB safely."""
     if isinstance(x, Image.Image):
         return x.convert("RGB")
 
@@ -84,7 +77,6 @@ def _to_pil_rgb(x) -> Image.Image:
 
 
 def _safe_image(img, caption: str | None = None):
-    """Render image with max compatibility across Streamlit versions."""
     if img is None:
         st.info("Belum ada gambar untuk ditampilkan.")
         return
@@ -96,16 +88,14 @@ def _safe_image(img, caption: str | None = None):
         return
 
     cap = None if caption is None else str(caption)
-
-    # Some Streamlit versions don't accept use_container_width
     try:
         st.image(img_pil, caption=cap, use_container_width=True)
     except TypeError:
         st.image(img_pil, caption=cap, use_column_width=True)
 
 
-def _safe_button(label: str, *, type: str = "secondary", key: str | None = None) -> bool:
-    """Button with fallback + explicit key to avoid DuplicateWidgetID."""
+def _safe_button(label: str, *, type: str = "secondary", key: str) -> bool:
+    """ALWAYS provide key to avoid DuplicateWidgetID."""
     try:
         return st.button(label, type=type, use_container_width=True, key=key)
     except TypeError:
@@ -116,26 +106,23 @@ def _safe_button(label: str, *, type: str = "secondary", key: str | None = None)
 # Preprocess + probs
 # =========================
 def preprocess(img: Image.Image, img_size: int, channels: int) -> np.ndarray:
-    """Preprocess PIL -> (1,H,W,C) float32 0..1."""
     img_size = int(img_size)
     channels = int(channels)
 
     if channels == 1:
         img = img.convert("L").resize((img_size, img_size))
         arr = np.array(img, dtype=np.float32) / 255.0
-        arr = arr[..., None]  # (H,W,1)
+        arr = arr[..., None]
     else:
         img = img.convert("RGB").resize((img_size, img_size))
-        arr = np.array(img, dtype=np.float32) / 255.0  # (H,W,3)
+        arr = np.array(img, dtype=np.float32) / 255.0
 
-    return np.expand_dims(arr, 0).astype(np.float32)  # (1,H,W,C)
+    return np.expand_dims(arr, 0).astype(np.float32)
 
 
 def probs_from_pred(y: np.ndarray) -> np.ndarray:
-    """Handle sigmoid/logits/softmax outputs -> probs (n_class,)."""
     y = np.squeeze(y)
 
-    # binary sigmoid variants
     if y.ndim == 0:
         p = float(y)
         return np.array([1 - p, p], dtype=np.float32)
@@ -143,7 +130,6 @@ def probs_from_pred(y: np.ndarray) -> np.ndarray:
         p = float(y[0])
         return np.array([1 - p, p], dtype=np.float32)
 
-    # multiclass (2 or more)
     probs = y.astype(np.float32)
     s = float(np.sum(probs))
     if not (0.98 <= s <= 1.02) or np.any(probs < 0):
@@ -176,12 +162,11 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
 
     left, right = st.columns([1, 1], gap="large")
 
-    # state
     img = None
     caption = None
 
     with left:
-        model_choice = st.selectbox("Pilih Model", list(model_specs.keys()))
+        model_choice = st.selectbox("Pilih Model", list(model_specs.keys()), key="citra_model_choice")
         model_path = models_dir / model_specs[model_choice]
         if not model_path.exists():
             st.error(f"File model tidak ditemukan: {model_path.name}")
@@ -195,39 +180,42 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
         st.caption("Model input spec terbaca otomatis dari input shape.")
         c1, c2, c3 = st.columns(3)
         with c1:
-            img_size = st.number_input("IMG_SIZE", value=int(img_size_default), step=1)
+            img_size = st.number_input("IMG_SIZE", value=int(img_size_default), step=1, key="citra_img_size")
         with c2:
             st.write("channels")
-            st.selectbox("channels (auto)", [channels], index=0, disabled=True)
+            st.selectbox("channels (auto)", [channels], index=0, disabled=True, key="citra_channels_locked")
         with c3:
-            topk = st.slider("Top-K", 1, 5, 3)
+            topk = st.slider("Top-K", 1, 5, 3, key="citra_topk")
 
         st.markdown("---")
         mode = st.radio(
             "Sumber gambar",
             ["Upload gambar"] + (["Pilih dari dataset contoh (Cat/Dog)"] if dataset_available(dataset_dir) else []),
             horizontal=True,
+            key="citra_source_mode",
         )
 
         if mode.startswith("Pilih") and dataset_available(dataset_dir):
-            cls = st.selectbox("Kelas (folder)", ["Cat", "Dog"])
+            cls = st.selectbox("Kelas (folder)", ["Cat", "Dog"], key="citra_cls")
             files = list_images(dataset_dir / cls)
             if not files:
                 st.warning(f"Tidak ada gambar di: {dataset_dir/cls}")
                 st.stop()
 
-            pick = st.radio("Pilih file", ["Acak", "Manual"], horizontal=True)
+            pick = st.radio("Pilih file", ["Acak", "Manual"], horizontal=True, key="citra_pick_mode")
             chosen = random.choice(files) if pick == "Acak" else st.selectbox(
-                "File", files, format_func=lambda p: p.name
+                "File", files, format_func=lambda p: p.name, key="citra_file_pick"
             )
+
             with Image.open(chosen) as im:
                 img = im.copy()
             caption = f"{cls}/{chosen.name}"
         else:
-            up = st.file_uploader("Upload gambar", type=["png", "jpg", "jpeg", "webp"])
+            up = st.file_uploader("Upload gambar", type=["png", "jpg", "jpeg", "webp"], key="citra_uploader")
             if up is None:
                 st.info("Upload gambar dulu untuk mulai prediksi.")
                 st.stop()
+
             with Image.open(up) as im:
                 img = im.copy()
             caption = "Uploaded"
@@ -237,7 +225,8 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
         _safe_image(img, caption=caption)
 
         st.write("")
-        do_pred = _safe_button("🚀 Prediksi Sekarang", type="primary", key="btn_prediksi_citra")
+        # IMPORTANT: tombol cuma SATU dan key unik
+        do_pred = _safe_button("🚀 Prediksi Sekarang", type="primary", key="btn_prediksi_citra_unique")
 
         if do_pred:
             if img is None:
@@ -256,10 +245,7 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             st.success(f"Prediksi: **{label_from_map(label_map, best)}** (prob: **{float(probs[best]):.4f}**)")
 
             import pandas as pd
-            rows = [
-                {"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])}
-                for i in order
-            ]
+            rows = [{"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])} for i in order]
             st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
@@ -282,16 +268,14 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
 
     cat_files = list_images(dataset_dir / "Cat")
     dog_files = list_images(dataset_dir / "Dog")
-
     if len(cat_files) == 0 or len(dog_files) == 0:
         st.error("Folder Cat/Dog kosong. Isi dulu gambar untuk evaluasi.")
         st.stop()
 
-    max_per_class = st.slider("Maks gambar per kelas (untuk evaluasi cepat)", 5, 200, 40, step=5)
+    max_per_class = st.slider("Maks gambar per kelas (untuk evaluasi cepat)", 5, 200, 40, step=5, key="eval_max_per_class")
     cat_files = cat_files[:max_per_class]
     dog_files = dog_files[:max_per_class]
 
-    # label index from labels.json expected: 0=Cat 1=Dog
     name_to_id = {}
     if isinstance(label_map, dict):
         for k, v in label_map.items():
@@ -299,12 +283,11 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
                 name_to_id[str(v)] = int(k)
             except Exception:
                 pass
-
     if "Cat" not in name_to_id or "Dog" not in name_to_id:
         st.warning("labels.json tidak terbaca sempurna. Pastikan format: {'0':'Cat','1':'Dog'}")
         name_to_id = {"Cat": 0, "Dog": 1}
 
-    do_run = _safe_button("🧪 Jalankan Evaluasi 3 Model", type="primary", key="btn_eval_citra")
+    do_run = _safe_button("🧪 Jalankan Evaluasi 3 Model", type="primary", key="btn_eval_citra_unique")
     if not do_run:
         st.caption("Klik tombol di atas untuk menghitung accuracy, confusion matrix, dan classification report.")
         return
@@ -326,8 +309,7 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
             m = load_keras_model(model_path)
             img_size_m, channels_m = infer_model_spec(m)
 
-            y_true = []
-            y_pred = []
+            y_true, y_pred = [], []
 
             for fp in cat_files:
                 with Image.open(fp) as im:
@@ -347,33 +329,16 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
 
             acc = accuracy_score(y_true, y_pred)
             cm = confusion_matrix(y_true, y_pred, labels=[name_to_id["Cat"], name_to_id["Dog"]])
-            rep = classification_report(
-                y_true,
-                y_pred,
-                target_names=["Cat", "Dog"],
-                digits=4,
-                zero_division=0,
-            )
+            rep = classification_report(y_true, y_pred, target_names=["Cat", "Dog"], digits=4, zero_division=0)
 
-            results.append(
-                {
-                    "Model": title,
-                    "File": fname,
-                    "Accuracy": float(acc),
-                    "Confusion Matrix": cm,
-                    "Report": rep,
-                    "Note": "",
-                }
-            )
+            results.append({"Model": title, "File": fname, "Accuracy": float(acc), "Confusion Matrix": cm, "Report": rep, "Note": ""})
 
         prog.progress(int(mi / total_models * 100), text=f"Selesai {mi}/{total_models}")
 
     st.progress(100, text="Evaluasi selesai ✅")
 
     st.markdown("### 📌 Ringkasan Performa")
-    df = pd.DataFrame(
-        [{"Model": r["Model"], "File": r["File"], "Accuracy": r["Accuracy"], "Note": r.get("Note", "")} for r in results]
-    )
+    df = pd.DataFrame([{"Model": r["Model"], "File": r["File"], "Accuracy": r["Accuracy"], "Note": r.get("Note", "")} for r in results])
     st.dataframe(df.sort_values("Accuracy", ascending=False, na_position="last"), use_container_width=True)
 
     st.markdown("---")
@@ -384,7 +349,6 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
         if r["Accuracy"] is None:
             st.error(f"Gagal evaluasi: {r.get('Note','')}")
             continue
-
         st.metric("Accuracy", f"{r['Accuracy']:.4f}")
         st.write("Confusion Matrix (rows=true, cols=pred) urutan: [Cat, Dog]")
         st.write(r["Confusion Matrix"])
@@ -393,17 +357,9 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
 
 
 # =========================
-# Entrypoint for app.py
+# Entrypoint
 # =========================
 def run_citra_app(models_dir: Path, page: str):
-    """
-    models_dir/
-      labels.json
-      model_base_non_pretrained.keras
-      model_pretrained_1_mobilenetv2.keras
-      model_pretrained_2_efficientnetb0.keras
-      citra dataset contoh/Cat, Dog
-    """
     dataset_dir = models_dir / "citra dataset contoh"
     label_map = load_label_map(models_dir)
 
