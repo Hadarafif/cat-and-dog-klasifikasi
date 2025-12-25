@@ -173,6 +173,10 @@ models/
 
 Jalankan aplikasi Streamlit
 ---
+
+Link Live Demo :https://cananddoguap.streamlit.app/
+
+----
 👤 Identitas Mahasiswa
 
 Nama: M. Haidar Afif Al Azizi
