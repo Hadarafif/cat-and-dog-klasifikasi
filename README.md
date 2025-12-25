@@ -110,15 +110,19 @@ Model Base CNN menunjukkan peningkatan akurasi secara bertahap dengan loss yang 
 
 ## 📊 Evaluasi Model (Classification Report)
 
-### 🔹 Base CNN (Non-pretrained)
-Accuracy: 80%
+### 🔹 Base CNN (Non-pretained)
+Accuracy: 80%<img width="1189" height="390" alt="download" src="https://github.com/user-attachments/assets/67f830ec-2714-45c1-861b-422520a1ffe9" />
+
 | Class | Precision | Recall | F1-score |
 |------|-----------|--------|----------|
 | Cat  | 0.78      | 0.82   |  0.80    |
 | Dog  | 0.81      | 0.77   |  0.79    |
+<img width="1189" height="390" alt="image" src="https://github.com/user-attachments/assets/0a5ce332-48f0-45c7-bdeb-e5d5075529f3" />
 
 Accuracy: 80%
-### 🔹 Pretrained 1 – MobileNetV2
+### 🔹 Pretrained 1 – MobileNetV2!<img width="1189" height="390" alt="image" src="https://github.com/user-attachments/assets/b91c67ac-0634-4466-842d-2094a07d6ec6" />
+
+
 | Class | Precision | Recall | F1-score |
 |------|-----------|--------|----------|
 | Cat  |      0.99 | 0.96   |   0.98   |
