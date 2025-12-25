@@ -218,7 +218,6 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             caption = "Uploaded"
 
     with right:
-<<<<<<< HEAD
         st.subheader("🖼️ Preview")
         _safe_image(img, caption=caption)
 
@@ -231,12 +230,6 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             x = preprocess(img, int(img_size), int(channels))
             y = model.predict(x, verbose=0)
             probs = probs_from_pred(y)
-=======
-     st.subheader("🖼️ Preview")
-
-    # st.image: gunakan use_column_width (kompatibel)
-    st.image(img, caption=caption, use_column_width=True)
->>>>>>> 7272fbc (Fix Streamlit st.image arg compatibility)
 
     st.write("")
 
