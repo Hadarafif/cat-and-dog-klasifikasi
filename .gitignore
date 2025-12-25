@@ -6,6 +6,6 @@ __pycache__/
 .pdm-python
 
 # ignore large model files
-models/*.keras
+#models/*.keras
 models/*.h5
 
