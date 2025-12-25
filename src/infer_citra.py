@@ -52,14 +52,71 @@ def label_from_map(label_map, idx: int) -> str:
     return str(idx)
 
 
+# =========================
+# Image safety helpers (FIX TypeError & incompatible image types)
+# =========================
+def _to_pil_rgb(x) -> Image.Image:
+    """Convert various image-like inputs to PIL RGB safely."""
+    if isinstance(x, Image.Image):
+        return x.convert("RGB")
+
+    # numpy array
+    if isinstance(x, np.ndarray):
+        arr = x
+        # (H,W,1) -> (H,W)
+        if arr.ndim == 3 and arr.shape[-1] == 1:
+            arr = arr.squeeze(-1)
+
+        # floats -> uint8
+        if np.issubdtype(arr.dtype, np.floating):
+            arr = np.clip(arr, 0, 1)
+            arr = (arr * 255).astype(np.uint8)
+        elif arr.dtype != np.uint8:
+            arr = arr.astype(np.uint8)
+
+        if arr.ndim == 2:
+            return Image.fromarray(arr, mode="L").convert("RGB")
+        return Image.fromarray(arr).convert("RGB")
+
+    # file-like/path/bytes: let PIL decide
+    return Image.open(x).convert("RGB")
+
+
+def _safe_image(img, caption: str | None = None):
+    """Render image with max compatibility across Streamlit versions."""
+    if img is None:
+        st.info("Belum ada gambar untuk ditampilkan.")
+        return
+
+    try:
+        img_pil = _to_pil_rgb(img)
+    except Exception:
+        st.error("Gambar tidak valid / gagal dibuka. Coba file lain.")
+        return
+
+    cap = None if caption is None else str(caption)
+
+    # Some environments/versions error on use_container_width -> fallback
+    try:
+        st.image(img_pil, caption=cap, use_container_width=True)
+    except TypeError:
+        st.image(img_pil, caption=cap, use_column_width=True)
+
+
 def preprocess(img: Image.Image, img_size: int, channels: int) -> np.ndarray:
+    """Preprocess PIL -> (1,H,W,C) float32 0..1."""
+    img_size = int(img_size)
+    channels = int(channels)
+
     if channels == 1:
         img = img.convert("L").resize((img_size, img_size))
-        arr = (np.array(img, dtype=np.float32) / 255.0)[..., None]  # (H,W,1)
+        arr = np.array(img, dtype=np.float32) / 255.0
+        arr = arr[..., None]  # (H,W,1)
     else:
         img = img.convert("RGB").resize((img_size, img_size))
         arr = np.array(img, dtype=np.float32) / 255.0  # (H,W,3)
-    return np.expand_dims(arr, 0)  # (1,H,W,C)
+
+    return np.expand_dims(arr, 0).astype(np.float32)  # (1,H,W,C)
 
 
 def probs_from_pred(y: np.ndarray) -> np.ndarray:
@@ -109,10 +166,7 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
     left, right = st.columns([1, 1], gap="large")
 
     with left:
-        model_choice = st.selectbox(
-            "Pilih Model",
-            list(model_specs.keys()),
-        )
+        model_choice = st.selectbox("Pilih Model", list(model_specs.keys()))
         model_path = models_dir / model_specs[model_choice]
         if not model_path.exists():
             st.error(f"File model tidak ditemukan: {model_path.name}")
@@ -141,7 +195,7 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
         )
 
         img = None
-        caption = ""
+        caption = None
 
         if mode.startswith("Pilih") and dataset_available(dataset_dir):
             cls = st.selectbox("Kelas (folder)", ["Cat", "Dog"])
@@ -151,22 +205,28 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
                 st.stop()
             pick = st.radio("Pilih file", ["Acak", "Manual"], horizontal=True)
             chosen = random.choice(files) if pick == "Acak" else st.selectbox("File", files, format_func=lambda p: p.name)
-            img = Image.open(chosen)
+            with Image.open(chosen) as im:
+                img = im.copy()
             caption = f"{cls}/{chosen.name}"
         else:
             up = st.file_uploader("Upload gambar", type=["png", "jpg", "jpeg", "webp"])
             if up is None:
                 st.info("Upload gambar dulu untuk mulai prediksi.")
                 st.stop()
-            img = Image.open(up)
+            with Image.open(up) as im:
+                img = im.copy()
             caption = "Uploaded"
 
     with right:
         st.subheader("🖼️ Preview")
-        st.image(img, caption=caption, use_container_width=True)
+        _safe_image(img, caption=caption)
 
         st.write("")
         if st.button("🚀 Prediksi Sekarang", type="primary", use_container_width=True):
+            if img is None:
+                st.warning("Gambar belum ada.")
+                st.stop()
+
             x = preprocess(img, int(img_size), int(channels))
             y = model.predict(x, verbose=0)
             probs = probs_from_pred(y)
@@ -203,7 +263,6 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
         st.error("Dataset contoh tidak ditemukan. Pastikan ada folder: `models/citra dataset contoh/Cat` dan `Dog`.")
         st.stop()
 
-    # gather dataset
     cat_files = list_images(dataset_dir / "Cat")
     dog_files = list_images(dataset_dir / "Dog")
 
@@ -216,10 +275,8 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
     dog_files = dog_files[:max_per_class]
 
     # label index from labels.json expected: 0=Cat 1=Dog
-    # build name_to_id from label_map
     name_to_id = {}
     if isinstance(label_map, dict):
-        # {"0":"Cat","1":"Dog"} -> {"Cat":0,"Dog":1}
         for k, v in label_map.items():
             try:
                 name_to_id[str(v)] = int(k)
@@ -228,7 +285,6 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
 
     if "Cat" not in name_to_id or "Dog" not in name_to_id:
         st.warning("labels.json tidak terbaca sempurna. Pastikan format: {'0':'Cat','1':'Dog'}")
-        # fallback assume Cat=0 Dog=1
         name_to_id = {"Cat": 0, "Dog": 1}
 
     do_run = st.button("🧪 Jalankan Evaluasi 3 Model", type="primary")
@@ -240,7 +296,6 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
     import pandas as pd
 
     results = []
-
     prog = st.progress(0, text="Mulai evaluasi...")
     total_models = len(model_specs)
 
@@ -257,23 +312,21 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
             y_true = []
             y_pred = []
 
-            # Cat
             for fp in cat_files:
-                im = Image.open(fp)
-                x = preprocess(im, img_size_m, channels_m)
+                with Image.open(fp) as im:
+                    im2 = im.copy()
+                x = preprocess(im2, img_size_m, channels_m)
                 prob = probs_from_pred(m.predict(x, verbose=0))
-                pred = int(np.argmax(prob))
                 y_true.append(name_to_id["Cat"])
-                y_pred.append(pred)
+                y_pred.append(int(np.argmax(prob)))
 
-            # Dog
             for fp in dog_files:
-                im = Image.open(fp)
-                x = preprocess(im, img_size_m, channels_m)
+                with Image.open(fp) as im:
+                    im2 = im.copy()
+                x = preprocess(im2, img_size_m, channels_m)
                 prob = probs_from_pred(m.predict(x, verbose=0))
-                pred = int(np.argmax(prob))
                 y_true.append(name_to_id["Dog"])
-                y_pred.append(pred)
+                y_pred.append(int(np.argmax(prob)))
 
             acc = accuracy_score(y_true, y_pred)
             cm = confusion_matrix(y_true, y_pred, labels=[name_to_id["Cat"], name_to_id["Dog"]])
@@ -300,14 +353,12 @@ def ui_evaluate(models_dir: Path, dataset_dir: Path, model_specs: dict, label_ma
 
     st.progress(100, text="Evaluasi selesai ✅")
 
-    # Summary table
     st.markdown("### 📌 Ringkasan Performa")
     df = pd.DataFrame(
         [{"Model": r["Model"], "File": r["File"], "Accuracy": r["Accuracy"], "Note": r.get("Note", "")} for r in results]
     )
     st.dataframe(df.sort_values("Accuracy", ascending=False, na_position="last"), use_container_width=True)
 
-    # Detailed
     st.markdown("---")
     st.markdown("### 🔎 Detail Evaluasi per Model")
     for r in results:
