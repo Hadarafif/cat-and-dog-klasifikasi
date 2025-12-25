@@ -1,3 +1,7 @@
+![Status](https://img.shields.io/badge/STATUS-COMPLETED-brightgreen)
+![Python](https://img.shields.io/badge/PYTHON-3.10-blue)
+![TensorFlow](https://img.shields.io/badge/TENSORFLOW-2.x-orange)
+![Streamlit](https://img.shields.io/badge/STREAMLIT-FRAMEWORK-red)
 
 <img width="275" height="183" alt="image" src="https://github.com/user-attachments/assets/c599b23b-4ad1-444e-9377-20d1b6017733" />
 
@@ -141,7 +145,7 @@ File model berukuran besar (>100MB) sehingga tidak disimpan di GitHub.
 
 🔗 Link Google Drive Model:
 
-(Tempelkan link Google Drive di sini)
+([https://drive.google.com/drive/folders/1fECM1jR9D_XO2yIt9cHHE5MzwntO6Qc3?usp=sharing])
 
 Cara menggunakan:
 
@@ -149,6 +153,12 @@ Download file model
 
 Simpan ke folder:
 models/
+
+🔗 Link Dataset:
+([https://www.kaggle.com/datasets/bhavikjikadara/dog-and-cat-classification-dataset])
+
+
+
 Jalankan aplikasi Streamlit
 ---
 👤 Identitas Mahasiswa
