@@ -1,11 +1,19 @@
-![Status](https://img.shields.io/badge/STATUS-COMPLETED-brightgreen)
-![Python](https://img.shields.io/badge/PYTHON-3.10-blue)
-![TensorFlow](https://img.shields.io/badge/TENSORFLOW-2.x-orange)
-![Streamlit](https://img.shields.io/badge/STREAMLIT-FRAMEWORK-red)
+<h1 align="center">🐶🐱 Dog vs Cat Image Classification</h1>
 
-<img width="275" height="183" alt="image" src="https://github.com/user-attachments/assets/c599b23b-4ad1-444e-9377-20d1b6017733" />
+<p align="center">
+  <b>Ujian Akhir Praktikum (UAP) – Pembelajaran Mesin</b>
+</p>
 
-# 🐶🐱 Dog vs Cat Image Classification
+<p align="center">
+  <img src="https://img.shields.io/badge/STATUS-COMPLETED-brightgreen" />
+  <img src="https://img.shields.io/badge/PYTHON-3.10-blue" />
+  <img src="https://img.shields.io/badge/TENSORFLOW-2.x-orange" />
+  <img src="https://img.shields.io/badge/STREAMLIT-FRAMEWORK-red" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/c599b23b-4ad1-444e-9377-20d1b6017733" width="275" height="183">
+</p>
 
 Project ini dibuat untuk memenuhi **Ujian Akhir Praktikum (UAP)** pada mata kuliah **Pembelajaran Mesin / Machine Learning**.  
 Fokus project adalah membangun sistem **klasifikasi citra** untuk membedakan **gambar anjing (Dog)** dan **kucing (Cat)** menggunakan **Deep Learning** serta membandingkan performa beberapa model.
