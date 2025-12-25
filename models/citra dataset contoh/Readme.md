@@ -1,2 +1,2 @@
-Untuk dataset lengkap nya bisa di download di link Berikut:
+Source Dataset:
 https://www.kaggle.com/datasets/bhavikjikadara/dog-and-cat-classification-dataset
