@@ -218,6 +218,7 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             caption = "Uploaded"
 
     with right:
+<<<<<<< HEAD
         st.subheader("🖼️ Preview")
         _safe_image(img, caption=caption)
 
@@ -230,20 +231,39 @@ def ui_predict(models_dir: Path, dataset_dir: Path, model_specs: dict, label_map
             x = preprocess(img, int(img_size), int(channels))
             y = model.predict(x, verbose=0)
             probs = probs_from_pred(y)
+=======
+     st.subheader("🖼️ Preview")
 
-            order = np.argsort(-probs)[:topk]
-            best = int(order[0])
+    # st.image: gunakan use_column_width (kompatibel)
+    st.image(img, caption=caption, use_column_width=True)
+>>>>>>> 7272fbc (Fix Streamlit st.image arg compatibility)
 
-            st.subheader("✅ Hasil Prediksi")
-            st.success(f"Model: **{model_choice}**")
-            st.success(f"Prediksi: **{label_from_map(label_map, best)}** (prob: **{float(probs[best]):.4f}**)")
+    st.write("")
 
-            import pandas as pd
-            rows = [
-                {"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])}
-                for i in order
-            ]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    # tombol: fallback kalau versi streamlit tidak dukung use_container_width
+    try:
+        do_pred = st.button("🚀 Prediksi Sekarang", type="primary", use_container_width=True)
+    except TypeError:
+        do_pred = st.button("🚀 Prediksi Sekarang", type="primary", use_column_width=True)
+
+    if do_pred:
+        x = preprocess(img, int(img_size), int(channels))
+        y = model.predict(x, verbose=0)
+        probs = probs_from_pred(y)
+
+        order = np.argsort(-probs)[:topk]
+        best = int(order[0])
+
+        st.subheader("✅ Hasil Prediksi")
+        st.success(f"Model: **{model_choice}**")
+        st.success(f"Prediksi: **{label_from_map(label_map, best)}** (prob: **{float(probs[best]):.4f}**)")
+
+        import pandas as pd
+        rows = [
+            {"class_id": int(i), "label": label_from_map(label_map, int(i)), "prob": float(probs[i])}
+            for i in order
+        ]
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
 # =========================
