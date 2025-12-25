@@ -34,15 +34,17 @@ Tujuan dari project ini adalah:
 ---
 
 ## 📂 Struktur Repository
+
+```text
 dog-vs-cat-klasifikasi/
-├── models/ # Folder model (tidak disertakan di GitHub)
-├── src/ # Source code pendukung
-├── app.py # Aplikasi Streamlit
-├── UAP.ipynb # Notebook training & evaluasi
-├── pyproject.toml # Konfigurasi environment (PDM)
-├── pdm.lock # Lock dependency
-├── .gitignore # Ignore file besar (model)
-├── README.md # Dokumentasi project
+├── models/              # Folder model (tidak disertakan di GitHub)
+├── src/                 # Source code pendukung
+├── app.py               # Aplikasi Streamlit
+├── UAP.ipynb            # Notebook training & evaluasi
+├── pyproject.toml       # Konfigurasi environment (PDM)
+├── pdm.lock             # Lock dependency
+├── .gitignore           # Ignore file besar (model)
+└── README.md            # Dokumentasi project
 
 ---
 
